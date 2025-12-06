@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电机学智能交互学习平台 V3.8 (交互优化版)</title>
+    
+    <!-- 基础样式 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Quill 编辑器 -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    
+    <!-- JS 库 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    
+    <!-- MathJax -->
+    <script>
+    window.MathJax = {
+      tex: { 
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          processEscapes: true 
+      },
+      svg: { fontCache: 'global' },
+      options: {
+        ignoreHtmlClass: 'tex2jax_ignore',
+        processHtmlClass: 'tex2jax_process'
+      }
+    };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow-x: hidden; }
+        .sidebar { min-height: 100vh; background: #2c3e50; color: white; box-shadow: 2px 0 10px rgba(0,0,0,0.1); }
+        .nav-link { color: rgba(255,255,255,0.75); cursor: pointer; margin-bottom: 8px; transition: all 0.3s; border-radius: 8px; padding: 12px 15px; }
+        .nav-link.active { color: #2c3e50; background: #fff; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .nav-link:hover { color: white; background: rgba(255,255,255,0.1); transform: translateX(5px); }
+        .canvas-container { background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 20px; }
+        .knowledge-card-item { cursor: pointer; transition: all 0.3s ease; border: none; border-left: 5px solid; position: relative; }
+        .knowledge-card-item:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); background-color: #f8f9fa; }
+        .ai-box { background: #eef2f5; border-left: 4px solid #17a2b8; padding: 15px; margin-top: 15px; border-radius: 4px; display: none; }
+        .ai-box.show { display: block; animation: fadeIn 0.5s; }
+        
+        /* 编辑器 */
+        .editor-page { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #f8f9fa; z-index: 2000; display: flex; flex-direction: column; animation: slideInRight 0.3s ease-out; }
+        .editor-header { background: white; border-bottom: 1px solid #ddd; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .editor-body { flex: 1; display: flex; overflow: hidden; }
+        .editor-sidebar { width: 300px; background: white; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; }
+        .editor-main { flex: 1; display: flex; flex-direction: column; background: #fff; padding: 20px; overflow-y: hidden; }
+        #quill-container { height: 100%; border: none !important; font-size: 1.1rem; }
+        .ql-toolbar { border: none !important; border-bottom: 1px solid #eee !important; background: #fafafa; }
+        .ql-container { border: none !important; }
+        .ql-editor iframe.ql-video { width: 100%; height: 450px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin: 10px 0; }
+        .ql-editor video { width: 100%; height: auto; max-height: 500px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin: 10px 0; background: #000; }
+
+        /* 模态框 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 2100; animation: fadeIn 0.2s ease; }
+        .modal-content-custom { background: white; padding: 30px; border-radius: 15px; width: 500px; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.2); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .confirm-icon { font-size: 3rem; margin-bottom: 15px; }
+        .answer-box { animation: slideDown 0.3s ease-out; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 10px; margin-top: 10px; }
+
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container-fluid">
+    
+    <div class="row" v-show="!showEditor">
+        <!-- 左侧导航 -->
+        <div class="col-md-2 sidebar p-3 sticky-top">
+            <h4 class="mb-4 mt-2 px-2"><i class="fas fa-bolt text-warning"></i> 电机学实验室</h4>
+            <div class="nav flex-column">
+                <a class="nav-link" :class="{active: currentTab === 'knowledge'}" @click="currentTab = 'knowledge'"><i class="fas fa-book-open me-2"></i> 基础知识讲解</a>
+                <a class="nav-link" :class="{active: currentTab === 'visual'}" @click="currentTab = 'visual'"><i class="fas fa-eye me-2"></i> 原理可视化</a>
+                <a class="nav-link" :class="{active: currentTab === 'quiz'}" @click="currentTab = 'quiz'"><i class="fas fa-edit me-2"></i> 专项练习</a>
+                <a class="nav-link" :class="{active: currentTab === 'mistakes'}" @click="currentTab = 'mistakes'">
+                    <i class="fas fa-bookmark me-2"></i> 错题收藏
+                    <span v-if="mistakeIds.length > 0" class="badge bg-danger rounded-pill ms-2">{{ mistakeIds.length }}</span>
+                </a>
+            </div>
+            <div class="mt-auto pt-5 px-2">
+                <div class="d-grid gap-2 mb-3">
+                    <button class="btn btn-outline-light btn-sm text-start" @click="handleExportClick"><i class="fas fa-share-alt"></i> 生成分享文件</button>
+                    <input type="file" id="fileInput" style="display: none" accept=".html" @change="processExport">
+                </div>
+                <small class="d-block mt-2 text-white-50"><i class="fas fa-circle" :class="apiStatusClass"></i> API: {{ apiStatusText }}</small>
+            </div>
+        </div>
+
+        <!-- 右侧内容 -->
+        <div class="col-md-10 p-4" style="height: 100vh; overflow-y: auto;">
+            
+            <!-- 模块0：知识库 -->
+            <div v-show="currentTab === 'knowledge'">
+                <div v-if="!selectedTopic">
+                    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+                        <h2 class="text-dark m-0">交流绕组核心知识库</h2>
+                        <button class="btn btn-primary shadow-sm" @click="openEditor(null)">
+                            <i class="fas fa-plus"></i> 新建知识卡片
+                        </button>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-4" v-for="item in fullKnowledgeList" :key="item.id">
+                            <div class="card h-100 knowledge-card-item shadow-sm" :style="{ borderLeftColor: item.borderColor || '#0d6efd' }" @click="viewTopic(item)">
+                                <div class="card-body">
+                                    <h5 class="card-title mb-3 text-dark">
+                                        <i :class="item.icon" class="me-2" :style="{ color: item.borderColor || '#0d6efd' }"></i>{{ item.title }}
+                                    </h5>
+                                    <p class="card-text text-muted small">{{ item.summary }}</p>
+                                </div>
+                                <div class="card-footer bg-transparent border-0 d-flex justify-content-end">
+                                    <button class="btn btn-sm btn-outline-secondary border-0 me-1" @click.stop="openEditor(item)"><i class="fas fa-pen"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger border-0" @click.stop="askToDelete(item)"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="knowledge-detail">
+                    <button class="btn btn-outline-secondary mb-3" @click="backToTopics"><i class="fas fa-arrow-left"></i> 返回列表</button>
+                    <div class="card shadow-lg border-0">
+                        <div class="card-header text-white p-4" :style="{ backgroundColor: selectedTopic.borderColor || '#0d6efd' }">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h2 class="m-0"><i :class="selectedTopic.icon" class="me-2"></i>{{ selectedTopic.title }}</h2>
+                                <button class="btn btn-light btn-sm text-primary" @click="openEditor(selectedTopic)"><i class="fas fa-pen me-1"></i> 编辑</button>
+                            </div>
+                        </div>
+                        <div class="card-body p-5">
+                            <div class="fs-5 lh-lg ql-editor" v-html="selectedTopic.content" style="padding: 0;"></div>
+                            <hr class="my-5">
+                            <div class="alert alert-info">
+                                <div class="d-flex align-items-start">
+                                    <i class="fas fa-lightbulb me-3 mt-1 fs-4"></i>
+                                    <div class="flex-grow-1">
+                                        <strong>思考一下：</strong> <span>{{ selectedTopic.thinking }}</span>
+                                        <div v-if="selectedTopic.thinkingAnswer" class="mt-2">
+                                            <!-- 核心修改：点击按钮触发专属的切换函数 -->
+                                            <button class="btn btn-sm btn-outline-primary" @click="toggleThinkingAnswer">
+                                                <i :class="showThinkingAnswer ? 'fas fa-eye-slash' : 'fas fa-eye'"></i> {{ showThinkingAnswer ? '收起答案' : '查看参考答案' }}
+                                            </button>
+                                            <div v-if="showThinkingAnswer" class="answer-box text-success">
+                                                <strong>参考答案：</strong> <span>{{ selectedTopic.thinkingAnswer }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模块2：可视化 -->
+            <div v-show="currentTab === 'visual'"><h2 class="mb-4 text-dark border-bottom pb-2">三相交流绕组与旋转磁场</h2><div class="row"><div class="col-md-6"><div class="canvas-container"><h5 class="text-secondary">电流波形</h5><canvas id="waveCanvas" width="500" height="300"></canvas></div></div><div class="col-md-6"><div class="canvas-container text-center"><h5 class="text-secondary">合成磁动势</h5><canvas id="vectorCanvas" width="300" height="300"></canvas></div></div></div><div class="card mt-4 p-4 border-0 shadow-sm"><div class="row align-items-center"><div class="col-md-8"><input type="range" class="form-range" min="0" max="720" step="1" v-model="timeAngle" @input="updateAnimation"></div><div class="col-md-2"><button class="btn btn-primary w-100 rounded-pill" @click="toggleAutoPlay">{{ isPlaying ? '暂停' : '播放' }}</button></div></div></div></div>
+            
+            <!-- 模块3：答题区 -->
+            <div v-show="currentTab === 'quiz'">
+                <h2 class="mb-4 text-dark border-bottom pb-2">专项智能测试</h2>
+                <div class="card mb-4 border-0 shadow-sm" v-for="(q, index) in questions" :key="q.id">
+                    <div class="card-body p-4">
+                        <h5 class="card-title fw-bold text-dark">Q{{ index + 1 }}. <span>{{ q.text }}</span></h5>
+                        <div class="list-group mt-4">
+                            <button v-for="(opt, key) in q.options" 
+                                    class="list-group-item list-group-item-action py-3 px-4 border-0 mb-2 rounded"
+                                    :class="getOptionClass(q, key)"
+                                    @click="selectOption(q, key)"
+                                    :disabled="q.userAnswer !== null">
+                                <span class="fw-bold me-2">{{ key }}.</span> <span>{{ opt }}</span>
+                            </button>
+                        </div>
+                        <div v-if="q.userAnswer && q.userAnswer !== q.correct" class="ai-box show">
+                            <div class="d-flex align-items-center mb-2"><strong class="text-info">DeepSeek 分析：</strong></div>
+                            <div v-if="q.aiAnalysis" class="text-dark" v-html="renderMarkdown(q.aiAnalysis)"></div>
+                            <div v-else class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>连接中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模块4：错题本 -->
+            <div v-show="currentTab === 'mistakes'"><h2 class="mb-4 text-dark border-bottom pb-2">错题收藏本</h2><div v-if="mistakeIds.length === 0" class="text-center py-5 text-muted"><h4>无错题</h4></div><div v-else><div v-for="q in getMistakeQuestions()" :key="q.id" class="card mb-3 border-danger shadow-sm"><div class="card-header bg-danger text-white d-flex justify-content-between"><span>ID: {{ q.id }}</span><button class="btn btn-sm btn-light text-danger fw-bold" @click="removeMistake(q.id)">移除</button></div><div class="card-body"><p class="card-text fw-bold">{{ q.text }}</p><div class="alert alert-success p-2">正确答案：{{ q.correct }}. {{ q.options[q.correct] }}</div></div></div></div></div>
+
+        </div>
+    </div>
+
+    <!-- 全屏编辑器 -->
+    <div class="editor-page" v-show="showEditor">
+        <div class="editor-header">
+            <div class="d-flex align-items-center">
+                <button class="btn btn-light me-3" @click="askToCloseEditor"><i class="fas fa-arrow-left"></i> 返回</button>
+                <h5 class="m-0 text-secondary">{{ editingId ? '编辑知识卡片' : '新建知识卡片' }}</h5>
+            </div>
+            <div>
+                <button class="btn btn-primary px-4" @click="saveEditorContent"><i class="fas fa-save me-2"></i>保存内容</button>
+            </div>
+        </div>
+        <div class="editor-body">
+            <div class="editor-sidebar">
+                <h6 class="mb-3 text-muted border-bottom pb-2">卡片属性</h6>
+                <div class="mb-3"><label class="form-label small">标题 (支持LaTeX)</label><input type="text" class="form-control" v-model="newTopic.title"></div>
+                <div class="mb-3"><label class="form-label small">简介 (支持LaTeX)</label><textarea class="form-control" rows="3" v-model="newTopic.summary"></textarea></div>
+                <div class="mb-3"><label class="form-label small">主题色</label><input type="color" class="form-control form-control-color w-100" v-model="newTopic.borderColor"></div>
+                <div class="mb-3"><label class="form-label small">图标</label><select class="form-select" v-model="newTopic.icon"><option value="fas fa-book">📖 书本</option><option value="fas fa-bolt">⚡ 闪电</option><option value="fas fa-lightbulb">💡 灯泡</option><option value="fas fa-magnet">🧲 磁铁</option><option value="fas fa-video">🎬 视频</option></select></div>
+                <h6 class="mb-3 mt-4 text-muted border-bottom pb-2">思考互动</h6>
+                <div class="mb-3"><label class="form-label small">思考问题 (支持LaTeX)</label><input type="text" class="form-control" v-model="newTopic.thinking"></div>
+                <div class="mb-3"><label class="form-label small">参考答案 (支持LaTeX) <span class="badge bg-light text-secondary">隐藏</span></label><textarea class="form-control" rows="3" v-model="newTopic.thinkingAnswer"></textarea></div>
+            </div>
+            <div class="editor-main"><div id="quill-container"></div></div>
+        </div>
+    </div>
+
+    <!-- 弹窗组件 -->
+    <div v-if="systemModal.visible" class="modal-overlay" @click.self="closeSystemModal"><div class="modal-content-custom" style="width: 400px; text-align: center;"><div :class="['confirm-icon', systemModal.type === 'confirm' ? 'text-danger' : 'text-primary']"><i :class="systemModal.type === 'confirm' ? 'fas fa-exclamation-triangle' : 'fas fa-info-circle'"></i></div><h4 class="mb-3">{{ systemModal.title }}</h4><p class="text-muted mb-4">{{ systemModal.message }}</p><div class="d-flex justify-content-center gap-3"><button v-if="systemModal.type === 'confirm'" class="btn btn-light px-4" @click="closeSystemModal">取消</button><button class="btn px-4" :class="systemModal.type === 'confirm' ? 'btn-danger' : 'btn-primary'" @click="executeSystemModal">{{ systemModal.type === 'confirm' ? '确定' : '知道了' }}</button></div></div></div>
+    <div v-if="showVideoModal" class="modal-overlay" @click.self="showVideoModal = false"><div class="modal-content-custom" style="width: 550px;"><div class="d-flex justify-content-between align-items-center mb-3"><h4 class="m-0 text-primary"><i class="fas fa-video me-2"></i>插入视频</h4><button type="button" class="btn-close" @click="showVideoModal = false"></button></div><div class="mb-3 text-start"><label class="form-label fw-bold small text-muted">方法1：B站嵌入代码</label><textarea class="form-control font-monospace text-muted" style="font-size: 0.85rem;" rows="2" v-model="videoInputCode"></textarea></div><div class="mb-3 text-start"><label class="form-label fw-bold small text-muted">方法2：视频链接 (URL)</label><input type="text" class="form-control" v-model="videoInputUrl"></div><div class="mb-4 text-start p-3 bg-light rounded border"><label class="form-label fw-bold small text-dark"><i class="fas fa-file-upload me-1"></i>方法3：上传本地视频 (支持分享)</label><input type="file" class="form-control" accept="video/*" @change="uploadLocalVideo"><div class="form-text mt-2 text-danger small" v-if="isUploading"><i class="fas fa-spinner fa-spin"></i> 正在转码中...</div><div class="form-text mt-1 small"><i class="fas fa-exclamation-circle text-warning"></i> 限制 <strong>100MB</strong>。</div></div><div class="d-flex justify-content-end gap-2"><button class="btn btn-light" @click="showVideoModal = false">取消</button><button class="btn btn-primary px-4" @click="confirmInsertVideo" :disabled="isUploading">确认插入</button></div></div></div>
+    <div v-if="showExportModal" class="modal-overlay" @click.self="showExportModal = false"><div class="modal-content-custom" style="width: 400px; text-align: center;"><div class="confirm-icon text-success"><i class="fas fa-file-export"></i></div><h4 class="mb-3">生成分享文件</h4><p class="text-muted mb-4 text-start small">请选择当前 HTML 文件作为模板。系统将打包所有数据。<br><span class="text-danger">大文件请耐心等待。</span></p><div class="d-flex justify-content-center gap-3"><button class="btn btn-light px-4" @click="showExportModal = false">取消</button><button class="btn btn-primary px-4" @click="triggerRealExport">选择文件</button></div></div></div>
+
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            currentTab: 'knowledge', selectedTopic: null,
+            showEditor: false, showExportModal: false, showVideoModal: false, isUploading: false, showThinkingAnswer: false,
+            systemModal: { visible: false, type: 'alert', title: '', message: '', callback: null },
+            videoInputCode: '', videoInputUrl: '', localVideoBase64: '', editingId: null, 
+            newTopic: { title: '', summary: '', content: '', thinking: '', thinkingAnswer: '', icon: 'fas fa-book', borderColor: '#20c997' },
+            quill: null, exportData: /* DATA_START */ { adds: [], mods: {}, deletes: [] } /* DATA_END */,
+            userAdds: [], userMods: {}, userDeletes: [],
+            // 默认数据
+            defaultKnowledgeList: [
+                { id: 1, title: "电角度与机械角度 $ \\theta $", icon: "fa-drafting-compass", borderColor: '#0d6efd', summary: "关系式：$$ \\theta_{elec} = p \\times \\theta_{mech} $$", content: "<p>电角度与机械角度的关系为：</p><p>$$ \\theta_{elec} = p \\times \\theta_{mech} $$</p><p>其中 $p$ 为极对数。</p>", thinking: "当 $p=3$ 时，转一圈电角度变化多少？", thinkingAnswer: "1080度 ($3 \\times 360$)" },
+                { id: 2, title: "短距系数 $k_p$", icon: "fa-compress-arrows-alt", borderColor: '#6610f2', summary: "消除谐波的关键。", content: "<p>$$ k_p = \\sin(\\frac{y}{\\tau} \\frac{\\pi}{2}) $$</p>", thinking: "短距角多少能消除5次谐波？", thinkingAnswer: "1/5 极距" },
+                { id: 3, title: "分布系数 $k_d$", icon: "fa-layer-group", borderColor: '#fd7e14', summary: "改善波形。", content: "<p>...</p>", thinking: "集中绕组的 $k_d$ 是多少？", thinkingAnswer: "1" },
+                { id: 4, title: "旋转磁场", icon: "fa-sync", borderColor: '#198754', summary: "三相电流合成。", content: "<p>...</p>", thinking: "交换两相接线？", thinkingAnswer: "反转" }
+            ],
+            questions: [
+                { id: 101, text: "在三相交流绕组中，通常采用什么方法消除谐波？", options: { A: "集中绕组", B: "短距和分布绕组", C: "整距绕组", D: "全节距绕组" }, correct: "B", userAnswer: null, aiAnalysis: null },
+                { id: 102, text: "三相对称电流产生的基波合成磁动势 $F_1$ 的性质是？", options: { A: "脉振", B: "圆形旋转", C: "椭圆旋转", D: "恒定" }, correct: "B", userAnswer: null, aiAnalysis: null },
+                { id: 103, text: "一台 $p=2$ 的电机，机械旋转 90 度，电角度变化多少？", options: { A: "90", B: "180", C: "45", D: "360" }, correct: "B", userAnswer: null, aiAnalysis: null }
+            ],
+            apiStatusText: '待机', apiStatusClass: 'text-secondary', mistakeIds: [], timeAngle: 0, isPlaying: true
+        }
+    },
+    computed: {
+        fullKnowledgeList() {
+            const visibleSystemCards = this.defaultKnowledgeList.filter(def => !this.userDeletes.includes(def.id));
+            const processedSystemCards = visibleSystemCards.map(def => {
+                if (this.userMods[def.id]) return { ...this.userMods[def.id], source: 'system' };
+                return { ...def, source: 'system' };
+            });
+            const userCards = this.userAdds.map(item => ({ ...item, source: 'user' }));
+            return [...processedSystemCards, ...userCards];
+        }
+    },
+    watch: {
+        currentTab() { this.$nextTick(this.renderMath); }, 
+        fullKnowledgeList: { handler() { this.$nextTick(this.renderMath); }, deep: true } 
+    },
+    mounted() {
+        this.initCanvas(); this.startLoop();
+        const savedMistakes = localStorage.getItem('motor_mistakes');
+        if (savedMistakes) this.mistakeIds = JSON.parse(savedMistakes);
+        if (this.exportData.adds) { this.userAdds = this.exportData.adds; this.userMods = this.exportData.mods; this.userDeletes = this.exportData.deletes; }
+        const lsData = localStorage.getItem('motor_knowledge_data');
+        if (lsData) {
+            const parsed = JSON.parse(lsData); const currentIds = new Set(this.userAdds.map(i => i.id));
+            if(parsed.adds) parsed.adds.forEach(item => { if (!currentIds.has(item.id)) this.userAdds.push(item); });
+            if(parsed.mods) this.userMods = { ...this.userMods, ...parsed.mods };
+            if(parsed.deletes) { const delSet = new Set([...this.userDeletes, ...parsed.deletes]); this.userDeletes = Array.from(delSet); }
+        }
+        this.$nextTick(this.renderMath); 
+    },
+    methods: {
+        renderMarkdown(text) { return text ? marked.parse(text) : ''; },
+        renderMath() { 
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise().catch(e => {}); 
+            } 
+        },
+        viewTopic(item) { this.selectedTopic = item; this.showThinkingAnswer = false; this.$nextTick(this.renderMath); },
+        backToTopics() { this.selectedTopic = null; this.$nextTick(this.renderMath); },
+        
+        // --- 核心修复：手动切换答案显示，并立即触发渲染 ---
+        toggleThinkingAnswer() {
+            this.showThinkingAnswer = !this.showThinkingAnswer;
+            if(this.showThinkingAnswer) {
+                this.$nextTick(() => {
+                    this.renderMath(); // 答案显示后立即渲染公式
+                });
+            }
+        },
+
+        // --- 模态框 ---
+        showSystemAlert(m, t) { this.systemModal = { visible: true, type: 'alert', title: t, message: m, callback: null }; },
+        showSystemConfirm(m, c, t) { this.systemModal = { visible: true, type: 'confirm', title: t, message: m, callback: c }; },
+        closeSystemModal() { this.systemModal.visible = false; },
+        executeSystemModal() { if (this.systemModal.callback) { this.systemModal.callback(); } this.systemModal.visible = false; },
+
+        // --- 编辑器 ---
+        openEditor(item) {
+            this.showEditor = true; this.editingId = item ? item.id : null;
+            if (item) { this.newTopic = JSON.parse(JSON.stringify(item)); } 
+            else { this.newTopic = { title: '', summary: '', content: '', thinking: '', thinkingAnswer: '', icon: 'fas fa-book', borderColor: '#20c997' }; }
+            this.$nextTick(() => { if (!this.quill) { this.quill = new Quill('#quill-container', { theme: 'snow', placeholder: '内容...', modules: { toolbar: { container: [ [{ 'header': [1, 2, 3, false] }], ['bold', 'italic', 'underline', 'strike'], [{ 'color': [] }, { 'background': [] }], [{ 'list': 'ordered'}, { 'list': 'bullet' }], ['link', 'image', 'video'], ['clean'] ], handlers: { 'video': () => { this.openVideoDialog(); } } } } }); } this.quill.root.innerHTML = this.newTopic.content || ''; });
+        },
+        askToCloseEditor() { this.showSystemConfirm('未保存退出?', () => { this.showEditor = false; this.$nextTick(this.renderMath); }, '确认'); },
+        saveEditorContent() {
+            if(!this.newTopic.title) { this.showSystemAlert('标题为空', '错误'); return; }
+            this.newTopic.content = this.quill.root.innerHTML;
+            if (this.editingId) { const isUserAdd = this.userAdds.find(i => i.id === this.editingId); if (isUserAdd) { const idx = this.userAdds.findIndex(i => i.id === this.editingId); this.userAdds[idx] = { ...this.newTopic, id: this.editingId }; } else { this.userMods[this.editingId] = { ...this.newTopic, id: this.editingId }; } } else { const newItem = { id: Date.now(), ...this.newTopic }; this.userAdds.push(newItem); }
+            this.saveToStorage(); this.showEditor = false; 
+            if (this.selectedTopic && this.selectedTopic.id === this.editingId) { this.viewTopic(this.newTopic); } else { this.$nextTick(this.renderMath); }
+        },
+        openVideoDialog() { this.videoInputCode=''; this.videoInputUrl=''; this.localVideoBase64=''; this.showVideoModal=true; },
+        uploadLocalVideo(e) { const f = e.target.files[0]; if(!f) return; if(f.size>100*1024*1024){this.showSystemAlert('大于100MB','错误'); return;} this.isUploading=true; const r = new FileReader(); r.onload=e=>{this.localVideoBase64=e.target.result; this.isUploading=false;}; r.readAsDataURL(f); },
+        confirmInsertVideo() { if(this.isUploading) return; if(this.localVideoBase64) { this.quill.insertEmbed(this.quill.getSelection(true).index, 'video', this.localVideoBase64); this.showVideoModal=false; return; } const url = this.videoInputCode.match(/src=["'](.*?)["']/) ? this.videoInputCode.match(/src=["'](.*?)["']/)[1] : (this.videoInputUrl || ''); if(!url) { this.showSystemAlert('链接为空','错误'); return; } this.quill.insertEmbed(this.quill.getSelection(true).index, 'video', url.startsWith('//') ? 'https:'+url : url); this.showVideoModal=false; },
+        askToDelete(item) { this.showSystemConfirm('确认删除?', () => { this.executeDelete(item); }, '警告'); },
+        executeDelete(item) { if (item.source === 'user') { this.userAdds = this.userAdds.filter(i => i.id !== item.id); } else { this.userDeletes.push(item.id); if (this.userMods[item.id]) delete this.userMods[item.id]; } this.saveToStorage(); if(this.selectedTopic && this.selectedTopic.id === item.id) this.selectedTopic = null; this.$nextTick(this.renderMath); },
+        saveToStorage() { localStorage.setItem('motor_knowledge_data', JSON.stringify({ adds: this.userAdds, mods: this.userMods, deletes: this.userDeletes })); },
+        handleExportClick() { this.showExportModal = true; }, triggerRealExport() { this.showExportModal = false; document.getElementById('fileInput').click(); },
+        processExport(e) { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { let src = ev.target.result; const full = { adds: this.userAdds, mods: this.userMods, deletes: this.userDeletes }; const newSrc = src.replace(/\/\* DATA_START \*\/.*?\/\* DATA_END \*\//s, `/* DATA_START */ ${JSON.stringify(full)} /* DATA_END */`); this.downloadFile(newSrc, '电机学工具集(完整版).html'); }; r.readAsText(f); e.target.value = ''; },
+        downloadFile(c, n) { const b = new Blob([c], { type: 'text/html' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = n; document.body.appendChild(a); a.click(); document.body.removeChild(a); },
+        initCanvas() { this.ctxWave = document.getElementById('waveCanvas')?.getContext('2d'); this.ctxVec = document.getElementById('vectorCanvas')?.getContext('2d'); },
+        updateAnimation() { if(this.ctxWave) { const ctx = this.ctxWave, t = this.timeAngle * Math.PI/180; ctx.clearRect(0,0,500,300); this.drawSine(ctx, t, 0, '#dc3545'); this.drawSine(ctx, t, -2.09, '#198754'); this.drawSine(ctx, t, 2.09, '#0d6efd'); } if(this.ctxVec) { const ctx = this.ctxVec, t = this.timeAngle * Math.PI/180; ctx.clearRect(0,0,300,300); ctx.beginPath(); ctx.moveTo(150,150); ctx.lineTo(150 + 80*Math.cos(t), 150 - 80*Math.sin(t)); ctx.strokeStyle='black'; ctx.lineWidth=4; ctx.stroke(); } },
+        drawSine(ctx, t, phase, color) { ctx.beginPath(); for(let x=0; x<500; x++) { ctx.lineTo(x, 150 - 60 * Math.cos(x/50 + t + phase)); } ctx.strokeStyle=color; ctx.stroke(); },
+        startLoop() { const loop = () => { if(this.isPlaying) { this.timeAngle=(this.timeAngle+1)%720; this.updateAnimation(); } requestAnimationFrame(loop); }; requestAnimationFrame(loop); },
+        toggleAutoPlay() { this.isPlaying = !this.isPlaying; },
+        getOptionClass(q, key) { if (!q.userAnswer) return ''; if (key === q.correct) return 'list-group-item-success'; if (key === q.userAnswer) return 'list-group-item-danger'; return ''; },
+        selectOption(q, key) { q.userAnswer = key; if (key !== q.correct) { this.saveMistake(q); this.triggerDeepSeekAnalysis(q); } },
+        saveMistake(q) { if (!this.mistakeIds.includes(q.id)) { this.mistakeIds.push(q.id); localStorage.setItem('motor_mistakes', JSON.stringify(this.mistakeIds)); } },
+        removeMistake(id) { this.mistakeIds = this.mistakeIds.filter(mid => mid !== id); localStorage.setItem('motor_mistakes', JSON.stringify(this.mistakeIds)); },
+        getMistakeQuestions() { return this.questions.filter(q => this.mistakeIds.includes(q.id)); },
+        async triggerDeepSeekAnalysis(question) { question.aiAnalysis = null; this.apiStatusText = "请求中..."; this.apiStatusClass = "text-warning"; const prompt = `题目：${question.text}。正确答案：${question.correct}。学生选了：${question.userAnswer}。请简要分析错误原因。`; const API_KEY = 'sk-7147054754ca46d1aa32748740799299'; const PROXY_URL = 'https://corsproxy.io/?' + encodeURIComponent('https://api.deepseek.com/chat/completions'); try { const response = await fetch(PROXY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` }, body: JSON.stringify({ model: "deepseek-chat", messages: [{"role": "user", "content": prompt}] }) }); if (!response.ok) throw new Error("Error"); const data = await response.json(); if(data.choices && data.choices.length > 0) { question.aiAnalysis = data.choices[0].message.content; question.cachedAnalysis = question.aiAnalysis; this.apiStatusText = "成功"; this.apiStatusClass = "text-success"; this.$nextTick(this.renderMath); } } catch (error) { this.apiStatusText = "失败"; this.apiStatusClass = "text-danger"; question.aiAnalysis = `⚠️ 调用失败。`; } }
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
